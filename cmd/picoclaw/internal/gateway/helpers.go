@@ -1,12 +1,19 @@
 package gateway
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/sipeed/picoclaw/cmd/picoclaw/internal"
@@ -40,6 +47,148 @@ import (
 	"github.com/sipeed/picoclaw/pkg/tools"
 	"github.com/sipeed/picoclaw/pkg/voice"
 )
+
+type pinchtabOptions struct {
+	Enabled  bool
+	ExecPath string
+	Args     []string
+	Env      []string
+	Health   string
+}
+
+func envBool(name string) bool {
+	v := strings.TrimSpace(os.Getenv(name))
+	v = strings.ToLower(v)
+	return v == "1" || v == "true" || v == "yes" || v == "on"
+}
+
+func pinchtabFromEnv() pinchtabOptions {
+	// Opt-in only: default disabled so we don't surprise existing users.
+	// Enable via: PICOCLAW_PINCHTAB_AUTOSPAWN=1
+	enabled := envBool("PICOCLAW_PINCHTAB_AUTOSPAWN")
+
+	execPath := strings.TrimSpace(os.Getenv("PICOCLAW_PINCHTAB_EXEC"))
+	if execPath == "" {
+		execPath = "pinchtab"
+	}
+
+	// Default to dashboard server mode; it provides /health and can proxy to a launched bridge.
+	args := []string{"server"}
+	if raw := strings.TrimSpace(os.Getenv("PICOCLAW_PINCHTAB_ARGS")); raw != "" {
+		args = strings.Fields(raw)
+	}
+
+	bind := strings.TrimSpace(os.Getenv("PICOCLAW_PINCHTAB_BIND"))
+	if bind == "" {
+		bind = "127.0.0.1"
+	}
+	port := strings.TrimSpace(os.Getenv("PICOCLAW_PINCHTAB_PORT"))
+	if port == "" {
+		port = "9870"
+	}
+
+	healthURL := strings.TrimSpace(os.Getenv("PICOCLAW_PINCHTAB_HEALTH"))
+	if healthURL == "" {
+		healthURL = fmt.Sprintf("http://%s/health", bind+":"+port)
+	}
+
+	// Pass through PinchTab's own env vars while allowing PicoClaw-specific overrides.
+	// These are intentionally minimal so we don't hard-code behavior.
+	env := []string{
+		"PINCHTAB_BIND=" + bind,
+		"PINCHTAB_PORT=" + port,
+	}
+	if v := strings.TrimSpace(os.Getenv("PICOCLAW_PINCHTAB_STRATEGY")); v != "" {
+		env = append(env, "PINCHTAB_STRATEGY="+v)
+	}
+	if v := strings.TrimSpace(os.Getenv("PICOCLAW_PINCHTAB_PROFILES_DIR")); v != "" {
+		env = append(env, "PINCHTAB_PROFILES_DIR="+v)
+	}
+
+	return pinchtabOptions{
+		Enabled:  enabled,
+		ExecPath: execPath,
+		Args:     args,
+		Env:      env,
+		Health:   healthURL,
+	}
+}
+
+func scanLines(r io.Reader, onLine func(string)) {
+	s := bufio.NewScanner(r)
+	s.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for s.Scan() {
+		onLine(s.Text())
+	}
+}
+
+func startPinchTab(ctx context.Context, opt pinchtabOptions) (*exec.Cmd, error) {
+	if !opt.Enabled {
+		return nil, nil
+	}
+
+	cmd := exec.CommandContext(ctx, opt.ExecPath, opt.Args...)
+	cmd.Env = append(os.Environ(), opt.Env...)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	logger.InfoCF("pinchtab", "PinchTab started", map[string]any{"pid": cmd.Process.Pid, "health": opt.Health})
+
+	go scanLines(stdout, func(line string) {
+		logger.InfoCF("pinchtab", line, nil)
+	})
+	go scanLines(stderr, func(line string) {
+		logger.WarnCF("pinchtab", line, nil)
+	})
+
+	// Probe health in background (best-effort) so users have a clear signal.
+	go func() {
+		client := http.Client{Timeout: 1 * time.Second}
+		for i := 0; i < 40; i++ {
+			if ctx.Err() != nil {
+				return
+			}
+			time.Sleep(250 * time.Millisecond)
+			resp, err := client.Get(opt.Health)
+			if err == nil {
+				resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					logger.InfoCF("pinchtab", "PinchTab health OK", nil)
+					return
+				}
+			}
+		}
+		logger.WarnCF("pinchtab", "PinchTab health probe timed out", map[string]any{"health": opt.Health})
+	}()
+
+	return cmd, nil
+}
+
+func stopPinchTab(cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	pid := cmd.Process.Pid
+	if runtime.GOOS == "windows" {
+		_ = cmd.Process.Kill()
+		logger.InfoCF("pinchtab", "PinchTab stopped (windows kill)", map[string]any{"pid": pid})
+		return
+	}
+	// Best-effort graceful stop.
+	_ = cmd.Process.Signal(syscall.SIGTERM)
+	logger.InfoCF("pinchtab", "PinchTab stop signal sent", map[string]any{"pid": pid})
+}
 
 func gatewayCmd(debug bool) error {
 	if debug {
@@ -156,6 +305,13 @@ func gatewayCmd(debug bool) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Optional PinchTab sidecar (opt-in via env: PICOCLAW_PINCHTAB_AUTOSPAWN=1)
+	pinchOpt := pinchtabFromEnv()
+	pinchCmd, pinchErr := startPinchTab(ctx, pinchOpt)
+	if pinchErr != nil {
+		logger.WarnCF("pinchtab", "Failed to start PinchTab", map[string]any{"error": pinchErr.Error()})
+	}
+
 	if err := cronService.Start(); err != nil {
 		fmt.Printf("Error starting cron service: %v\n", err)
 	}
@@ -202,6 +358,7 @@ func gatewayCmd(debug bool) error {
 	}
 	cancel()
 	msgBus.Close()
+	stopPinchTab(pinchCmd)
 
 	// Use a fresh context with timeout for graceful shutdown,
 	// since the original ctx is already canceled.

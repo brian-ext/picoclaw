@@ -60,7 +60,7 @@ func copyEmbeddedToTarget(targetDir string) error {
 	}
 
 	// Walk through all files in embed.FS
-	err := fs.WalkDir(embeddedFiles, "workspace", func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(embeddedFiles, "workspace_templates", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -76,7 +76,7 @@ func copyEmbeddedToTarget(targetDir string) error {
 			return fmt.Errorf("Failed to read embedded file %s: %w", path, err)
 		}
 
-		new_path, err := filepath.Rel("workspace", path)
+		new_path, err := filepath.Rel("workspace_templates", path)
 		if err != nil {
 			return fmt.Errorf("Failed to get relative path for %s: %v\n", path, err)
 		}

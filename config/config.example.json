@@ -461,6 +461,14 @@
     },
     "write_file": {
       "enabled": true
+    },
+    "pinchtab": {
+      "enabled": false,
+      "_comment": "Browser automation for whiteboard interaction and web scraping. Requires PinchTab server running on localhost:9870"
+    },
+    "librarian": {
+      "enabled": false,
+      "_comment": "Semantic search of repair manuals and technical documentation. STUB implementation - RAG/vector search to be implemented."
     }
   },
   "heartbeat": {

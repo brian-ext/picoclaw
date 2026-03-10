@@ -171,11 +171,16 @@ func registerSharedTools(
 
 		// PinchTab browser automation tool
 		if cfg.Tools.IsToolEnabled("pinchtab") {
-			pinchtabURL := "http://127.0.0.1:9870"
+			pinchtabURL := "http://127.0.0.1:9867"
 			if url := os.Getenv("PICOCLAW_PINCHTAB_URL"); url != "" {
 				pinchtabURL = url
 			}
 			agent.Tools.Register(tools.NewPinchTabTool(pinchtabURL))
+		}
+
+		// Librarian tool for repair manual search (RAG)
+		if cfg.Tools.IsToolEnabled("librarian") {
+			agent.Tools.Register(tools.NewLibrarianTool())
 		}
 
 		// Message tool

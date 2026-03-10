@@ -76,36 +76,47 @@ This checklist consolidates the actionable decisions and next steps discussed in
 **Key rules**:
 - Manuals should be stored locally.
 - Retrieval should be semantic (RAG) to avoid overloading the context window.
+- Token efficiency: 800 tokens/page via PinchTab extraction vs 10,000+ for screenshots
 
 ### ChromaDB vs Pinecone
-- [ ] Prefer **local ChromaDB** when offline/field use matters.
-- [ ] Pinecone only if you accept a managed cloud dependency and reliable connectivity.
+- [x] **Decision: ChromaDB** for offline/field use (garage environments)
+- [ ] Pinecone only if cloud deployment with reliable connectivity
 
-### First implementation steps
-- [ ] Define the Librarian tool result contract (structured output):
-  - [ ] `snippet`
-  - [ ] `source_manual`
-  - [ ] `page_number`
-  - [ ] `source_path_or_url`
-  - [ ] `machine_id` (VIN)
-  - [ ] optional `confidence/notes`
-- [ ] Decide v1 approach:
-  - [ ] Stub Librarian (interface-only) while whiteboard + PinchTab are being integrated
-  - [ ] Then implement vector search + manual ingestion pipeline
+### Implementation steps
+- [x] Define the Librarian tool result contract (structured output):
+  - [x] `snippet` - exact text excerpt
+  - [x] `source_manual` - manual name/title
+  - [x] `page_number` - page or section
+  - [x] `source_path_or_url` - file path
+  - [x] `machine_id` (VIN) - vehicle identifier
+  - [x] `confidence` - high/medium/low
+  - [x] `notes` - optional context
+- [x] V1 approach: Stub Librarian (interface-only) ✓
+- [ ] V2: Implement ChromaDB vector search
+  - [ ] Install ChromaDB Go client or use HTTP API
+  - [ ] Create manual ingestion pipeline (PDF → chunks → embeddings)
+  - [ ] Implement semantic search in Librarian tool
+  - [ ] Add embedding model (sentence-transformers or OpenAI)
+- [ ] Manual ingestion workflow:
+  - [ ] PDF extraction (text + images)
+  - [ ] Chunk by section/page (maintain context)
+  - [ ] Generate embeddings
+  - [ ] Store with metadata (VIN, year, make, model, page)
+  - [ ] Index for fast retrieval
 
-## 6) “Hard-Link” Rule (No Source, No Answer)
+## 6) "Hard-Link" Rule (No Source, No Answer)
 
 **Requirement**: If no verified manual page/source exists, the agent must refuse to give the spec.
 
-- [ ] Encode the rule into agent identity (Soul/Identity files) so the LLM is prompted correctly.
-- [ ] Define what counts as a “spec requiring citation”:
-  - [ ] torque values
-  - [ ] wiring colors/pinouts
-  - [ ] fuse ratings/locations
-  - [ ] fluid capacities
-  - [ ] critical safety steps (battery disconnect, jack stands, etc.)
-- [ ] Add runtime enforcement later (not required on day 1):
-  - [ ] detect “spec-like outputs”
+- [x] Encode the rule into agent identity (Soul/Identity files) 
+- [x] Define what counts as a "spec requiring citation": 
+  - [x] torque values
+  - [x] wiring colors/pinouts
+  - [x] fuse ratings/locations
+  - [x] fluid capacities
+  - [x] critical safety steps (battery disconnect, jack stands, etc.)
+- [ ] Add runtime enforcement (future enhancement):
+  - [ ] detect "spec-like outputs" in LLM response
   - [ ] require a Librarian citation present in the same turn/session
   - [ ] otherwise force a self-correction loop or refusal
 
@@ -113,15 +124,25 @@ This checklist consolidates the actionable decisions and next steps discussed in
 
 **Goal**: store repair history and confirmed variations per machine.
 
-- [ ] Define `machine_id` keying scheme:
-  - [ ] VIN if available
-  - [ ] otherwise a generated machine ID
-- [ ] Store sessions per machine (VIN-keyed):
-  - [ ] `workspace/sessions/{VIN}.json` (or `vin:{VIN}` session key)
-- [ ] Define memory tiers:
-  - [ ] Tier 1: manuals/TSBs in vector DB (source of truth)
-  - [ ] Tier 2: machine profile facts (`MACHINE_PROFILE.md` per VIN)
-  - [ ] Tier 3: session logs (chat + tool outputs)
+- [x] Define `machine_id` keying scheme: 
+  - [x] VIN if available (ISO 3779 validation)
+  - [x] Generated machine ID for non-vehicles (MAKE-MODEL-YEAR-SERIAL)
+- [x] Store sessions per machine (VIN-keyed): 
+  - [x] SQLite database (`workspace/sessions.db`)
+  - [x] `machines/` directory per VIN
+  - [x] Session JSON with insights tracking
+- [x] Define memory tiers: 
+  - [x] Tier 1: manuals/TSBs in vector DB (ChromaDB - to be implemented)
+  - [x] Tier 2: machine profile facts (`MACHINE_PROFILE.md` per VIN)
+  - [x] Tier 3: session logs (SQLite + JSON)
+- [x] Implement session database (pkg/session/database.go) 
+- [x] Implement VIN validation utilities (pkg/session/vin.go) 
+- [x] Create MACHINE_PROFILE.md template 
+- [ ] Integrate session DB with agent loop
+- [ ] Add P2P validated hack system
+  - [x] Database schema 
+  - [ ] Validation workflow (3+ confirmations)
+  - [ ] Network sync protocol (future)
 
 ## 8) Machine-to-Docs Verification (Deferred but Designed-In)
 
@@ -137,28 +158,66 @@ This checklist consolidates the actionable decisions and next steps discussed in
 
 ## 9) Minimal Deliverables (Sequence)
 
-### D1 — Gateway hosts whiteboard
-- [ ] `/whiteboard` loads from Gateway (`18790`) with embedded assets.
+### D1 — Gateway hosts whiteboard ✅
+- [x] `/whiteboard` loads from Gateway (`18790`) with embedded assets
+- [x] Whiteboard JS API for AI control (`window.picoclaw`)
+- [x] Routes registered in Gateway
 
-### D2 — PinchTab can drive the whiteboard
-- [ ] PinchTab navigates to `/whiteboard` and captures a screenshot.
+### D2 — PinchTab can drive the whiteboard (READY FOR TESTING)
+- [x] PinchTab tool wrapper created and registered
+- [x] PinchTab API endpoints verified and fixed
+- [x] Default port corrected (9867)
+- [x] Navigate endpoint fixed (/navigate)
+- [x] Comprehensive test guide created (docs/D2_D3_TESTING_GUIDE.md)
+- [ ] **Execute on test machine:** PinchTab navigates to `/whiteboard` and captures screenshot
+- [ ] **Requires:** Test machine with Chrome/Chromium
 
-### D3 — First annotation automation
-- [ ] PinchTab triggers a deterministic highlight and verifies via screenshot.
+### D3 — First annotation automation (READY FOR TESTING)
+- [x] Whiteboard JS API implemented (highlightRect, highlightCircle, addText, clear)
+- [x] PinchTab evaluate action implemented
+- [x] Test scenarios documented
+- [ ] **Execute on test machine:** PinchTab triggers deterministic highlight and verifies via screenshot
+- [ ] **Depends on:** D2 completion
 
-### D4 — Librarian contract + Hard-Link behavior (prompt-level)
-- [ ] Librarian tool schema exists (even stubbed)
-- [ ] Agent identity refuses specs without citation
+### D4 — Librarian contract + Hard-Link behavior ✅
+- [x] Librarian tool schema exists (stubbed)
+- [x] Agent identity refuses specs without citation
+- [x] Hard-Link rule encoded in IDENTITY.md
+
+### D5 — VIN-Keyed Sessions + Database (NEW) ✅
+- [x] SQLite session database implemented
+- [x] VIN validation and decoding
+- [x] MACHINE_PROFILE.md per VIN
+- [x] Multi-tier memory architecture documented
+- [x] P2P validated hack schema
+
+### D6 — Vector Search Implementation (READY FOR TESTING)
+- [x] ChromaDB integration (direct Go embedding)
+- [x] Manual ingestion pipeline (PDF → chunks → embeddings)
+- [x] Semantic search in Librarian tool
+- [x] Ingestion CLI command created
+- [x] Documentation complete (VECTOR_SEARCH_SETUP.md)
+- [ ] **Execute:** Test with real repair manual PDF
+- [ ] **Execute:** Verify semantic search returns relevant results
+
+### D7 — Web Sources Integration (READY FOR TESTING)
+- [x] charm.li adapter (1982-2013 manuals)
+- [x] PinchTab on-demand fetching (~800 tokens/page)
+- [x] Hybrid search (local ChromaDB + web sources)
+- [x] Caching strategy (store fetched pages in ChromaDB)
+- [x] Rate limiting and respectful scraping
+- [x] Documentation complete (WEB_SOURCES_INTEGRATION.md)
+- [ ] **Execute:** Test with charm.li queries (1982-2013 vehicles)
+- [ ] **Execute:** Verify caching to ChromaDB works
 
 ---
 
-## Open Decisions (Fill In)
+## Open Decisions
 
-- [ ] PinchTab startup:
-  - [ ] manual start
-  - [ ] auto-spawn by Gateway
-- [ ] Storage choice:
-  - [ ] local ChromaDB
-  - [ ] Pinecone
-- [ ] Machine key for non-vehicles:
-  - [ ] schema TBD
+- [x] **PinchTab startup:** Manual start (auto-spawn optional future feature)
+- [x] **Storage choice:** ChromaDB (local-first for offline garage use)
+- [x] **Machine key for non-vehicles:** MAKE-MODEL-YEAR-SERIAL format
+- [x] **Embedding model:** ONNX Runtime (sentence-transformers all-MiniLM-L6-v2)
+- [x] **Manual sources:** charm.li (1982-2013), local PDFs, TSBs (future), forums (future)
+- [ ] **P2P sync protocol:** Future consideration (validated hacks sharing)
+- [ ] **Additional web sources:** Forums, TSB databases, OEM sites

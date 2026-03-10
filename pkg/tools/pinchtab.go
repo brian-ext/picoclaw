@@ -19,7 +19,7 @@ type PinchTabTool struct {
 // NewPinchTabTool creates a new PinchTab tool instance
 func NewPinchTabTool(baseURL string) *PinchTabTool {
 	if baseURL == "" {
-		baseURL = "http://127.0.0.1:9870"
+		baseURL = "http://127.0.0.1:9867"
 	}
 	return &PinchTabTool{
 		baseURL: baseURL,
@@ -112,7 +112,7 @@ func (t *PinchTabTool) navigate(ctx context.Context, args map[string]any) *ToolR
 		"url": url,
 	}
 
-	resp, err := t.doRequest(ctx, "POST", "/nav", payload)
+	resp, err := t.doRequest(ctx, "POST", "/navigate", payload)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("navigation failed: %v", err))
 	}

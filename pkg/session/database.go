@@ -132,6 +132,45 @@ func (d *Database) initSchema() error {
 		FOREIGN KEY (session_id) REFERENCES sessions(session_id)
 	);
 
+	-- P2P Sync Tables
+	CREATE TABLE IF NOT EXISTS synced_hacks (
+		hack_id TEXT PRIMARY KEY,
+		source_garage_id TEXT,
+		synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		signature TEXT,
+		verified BOOLEAN DEFAULT 0,
+		hack_data_json TEXT,
+		FOREIGN KEY (hack_id) REFERENCES validated_hacks(hack_id)
+	);
+
+	CREATE TABLE IF NOT EXISTS peer_garages (
+		garage_id TEXT PRIMARY KEY,
+		public_key TEXT,
+		reputation_score INTEGER DEFAULT 0,
+		last_seen TIMESTAMP,
+		total_contributions INTEGER DEFAULT 0,
+		verified_contributions INTEGER DEFAULT 0,
+		rejected_contributions INTEGER DEFAULT 0
+	);
+
+	CREATE TABLE IF NOT EXISTS sync_log (
+		sync_id TEXT PRIMARY KEY,
+		sync_type TEXT,
+		started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		completed_at TIMESTAMP,
+		hacks_exported INTEGER DEFAULT 0,
+		hacks_imported INTEGER DEFAULT 0,
+		errors TEXT
+	);
+
+	CREATE TABLE IF NOT EXISTS garage_identity (
+		id INTEGER PRIMARY KEY CHECK (id = 1),
+		garage_id TEXT UNIQUE,
+		private_key TEXT,
+		public_key TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_sessions_vin ON sessions(vin);
 	CREATE INDEX IF NOT EXISTS idx_citations_session ON citations(session_id);
 	CREATE INDEX IF NOT EXISTS idx_hacks_vin ON validated_hacks(vin);

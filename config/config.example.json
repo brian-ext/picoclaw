@@ -472,8 +472,17 @@
     }
   },
   "heartbeat": {
-    "enabled": true,
-    "interval": 30
+    "enabled": false,
+    "interval": 3600
+  },
+  "p2p_sync": {
+    "enabled": false,
+    "sync_interval": 3600,
+    "min_validations": 3,
+    "auto_export": true,
+    "auto_import": true,
+    "export_path": "~/.picoclaw/workspace/p2p_export.json",
+    "import_path": "~/.picoclaw/workspace/p2p_import.json"
   },
   "devices": {
     "enabled": false,

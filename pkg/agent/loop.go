@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -166,6 +167,15 @@ func registerSharedTools(
 		}
 		if cfg.Tools.IsToolEnabled("spi") {
 			agent.Tools.Register(tools.NewSPITool())
+		}
+
+		// PinchTab browser automation tool
+		if cfg.Tools.IsToolEnabled("pinchtab") {
+			pinchtabURL := "http://127.0.0.1:9870"
+			if url := os.Getenv("PICOCLAW_PINCHTAB_URL"); url != "" {
+				pinchtabURL = url
+			}
+			agent.Tools.Register(tools.NewPinchTabTool(pinchtabURL))
 		}
 
 		// Message tool

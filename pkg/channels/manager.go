@@ -94,6 +94,11 @@ type asyncTask struct {
 	cancel context.CancelFunc
 }
 
+// Mux returns the HTTP ServeMux for registering additional routes.
+func (m *Manager) Mux() *http.ServeMux {
+	return m.mux
+}
+
 // RecordPlaceholder registers a placeholder message for later editing.
 // Implements PlaceholderRecorder.
 func (m *Manager) RecordPlaceholder(channel, chatID, placeholderID string) {
